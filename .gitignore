@@ -1,3 +1,4 @@
-# A folder for housing large data locally without moving to/from github
+# A folder for housing large data locally without moving to/from github 
+# (feel free to create a folder named "local_data" in your own recovery-group folder for this purpose)
 local_data/
 
