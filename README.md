@@ -9,3 +9,5 @@ Google docs
 ## Google drives
 
 - Temporary drive created during the workshop: https://drive.google.com/drive/folders/1S8Ub1VvNDrFEhwQNNoxRNLwJvFVEYoCP
+- Forest Recovery Shared Drive can be found in the 'Shared drives' tab in Google Drive (on your Google-enabled account):
+![Shared Drive](photos_from_workinggroup/forestrecovery_shareddrive.png)
