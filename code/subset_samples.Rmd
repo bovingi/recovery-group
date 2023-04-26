@@ -1,0 +1,46 @@
+---
+title: "subset_samples"
+output: html_document
+date: "2023-04-26"
+---
+
+## Description
+Code to extract subset of burned and unburned polygons for proof-of-concept.
+
+## Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+### Load packages
+library(tidyverse)
+library(sf)
+library(lubridate)
+```
+
+## Subset samples
+```{r}
+### Open data, add column for type of polygon 
+burned_polygons <- st_read("C:/Users/kjsie/OneDrive/Documents/recovery-group/Buffered_fire/recovery.shp") %>%
+  mutate(burned_status = "burned")
+unburned_polygons <- st_read("C:/Users/kjsie/OneDrive/Documents/recovery-group/Buffered_fire/unburned.shp") %>%
+  mutate(burned_status = "unburned")
+
+### Randomly sample 10 burned polygons
+burned_sub <- burned_polygons %>%
+  sample_n(10)
+
+### Get the corresponding unburned polygons
+unburned_sub <- unburned_polygons %>%
+  filter(Event_ID %in% burned_sub$Event_ID)
+
+### Combine into single sf
+all_sub <- rbind(burned_sub,
+                 unburned_sub)
+
+### Extract dates
+all_sub <- all_sub %>%
+  mutate(year_fire = year(Ig_Date),
+         month_fire = month(Ig_Date),
+         day_fire = day(Ig_Date))
+```
+
