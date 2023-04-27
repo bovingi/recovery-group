@@ -49,7 +49,7 @@ subset_points <- st_read(file.path(path_subset, "/subset_points.shp")) %>%
   st_transform(., crs = 5070)
 ```
 
-### Subset data to subset
+### Subset data to subset of polygons
 ```{r}
 ## POLYGONS
 ### Crop raster to subset of polygons
@@ -82,19 +82,51 @@ st_write(extract_raster,
 ```
 
 ## Python:
-Adapted from the Forest Resiliency Data Synthesis Working Group (ANSWER_KEY_ECOSTRESS)
+Adapted from the Forest Resiliency Data Synthesis Working Group (ANSWER_KEY_ECOSTRESS). Disclaimer: I do not have much experience with Python and used chatGPT for help. I'm not sure if it actually works. If someone wants to flesh this out, feel free to do so!
 ```{python}
-# Create path to data
-hayman_boundary = gpd.read_file(
-    path.join(data_path, ‘Hay_sch_polys.geojson’))
-ecostress_path = path.join(
-    data_path, “ECOSTRESS_L4_WUE_23611_012_20220904T134321_0601_01_WUEavg_GEO.tif”)
-    
-# Open and clip the data, cliping it to the study area boundary
-ecostress = rxr.open_rasterio(ecostress_path).rio.clip(hayman_boundary.geometry)
+### Load packages
+import rioxarray as rxr
+import geopandas as gpd
+import rasterio
+from rasterio.mask import mask
 
-# GEDI Data
-GEDI_path = path.join(data_path, ‘GEDI_4A_Hayman.geojson’)
-GEDI_data = gpd.read_file(GEDI_path)
+## Make data paths
+### file path for the subset of polygons and grid points
+python_path_subset = "C:/Users/kjsie/OneDrive/Documents/recovery-group/Buffered_fire"
+
+### file path for the raster (here, I'm using Landfire's EVT as an example)
+python_path_raster = "C:/Users/kjsie/OneDrive/Documents/recovery-group/LF2020_EVT_220_CONUS/Tif"
+
+### file path for cropped datasets
+python_path_saveto = "C:/Users/kjsie/OneDrive/Documents/recovery-group"
+
+### Make paths for data layers
+python_subset_poly = gpd.read_file(
+  path.join(python_path_subset, '/subset_polys.shp'))
+python_subset_points = gpd.read_file(
+    path.join(python_path_subset, '/subset_points.shp')) 
+python_landfire = path.join(python_path_raster, "LC20_EVT_220.tif")
+
+## Open and clip the data, clipping it to the study area boundary
+landfire_crop = rxr.open_rasterio(python_landfire).rio.clip(python_subset_poly.geometry)
+
+## Extract raster values to points
+import geopandas as gpd
+import rasterio
+from rasterio.features import rasterize
+
+### rasterize the point geometry into a raster mask
+shapes = ((geom, 1) for geom in python_subset_points.geometry)
+mask = rasterize(shapes, out_shape=python_landfire.shape, transform=python_landfire.transform)
+
+### extract values at points using the raster mask
+values = python_landfire.read(1, masked=TRUE)[mask == 1]
+python_subset_points['raster_value'] = values.tolist()
+
+## Save files
+### save clipped raster
+landfire_crop.rio.to_raster('C:/Users/kjsie/OneDrive/Documents/recovery-group/python_raster_cropped.tif') 
+### save extracted point values
+python_subset_points.to_file('C:/Users/kjsie/OneDrive/Documents/recovery-group/python_raster_extract.shp')
 ```
 
