@@ -53,36 +53,41 @@ all_sub <- all_sub %>%
 ```{r}
 ### Make sample grid
 point_grid <- map(all_sub$unique_id, function(x) {
+  
+  ### subset to individual polygon
   poly <- all_sub %>% filter(unique_id == x)
+  
+  ### make sample points for the polygon
   poly_samples <- poly %>%
     ### Make samples (cellsize is where I'm defining the grid)
     st_make_grid(cellsize = c(500, 500), what = "centers") %>%
+    
     ### Convert to sf
     st_sf()  %>%
+    
     ### Add identifiers
     mutate(unique_id = x,
            lon = st_coordinates(.)[,1],
            lat = st_coordinates(.)[,2])
+  
+  ### Intersect with polygon to drop points outside boundary
+  poly_samples <- st_intersection(poly_samples, poly)
+  
   return(poly_samples)
 })
 
 ### Combine
 sample_grid <- do.call(rbind, point_grid)
 
-### Get additional data cols
-all_sub_cols <- all_sub
-st_geometry(all_sub_cols) <- NULL
-
-### Merge them
-sample_grid <- merge(sample_grid,
-                     all_sub_cols,
-                     by = "unique_id")
+### Drop extra col
+sample_grid <- sample_grid %>%
+  dplyr::select(-unique_id.1)
 ```
 
 ### Write out data
 ```{r}
 st_write(all_sub,
-         "C:/Users/kjsie/OneDrive/Documents/recovery-group/Buffered_fire/subset_poly.shp")
+         "C:/Users/kjsie/OneDrive/Documents/recovery-group/Buffered_fire/subset_polys.shp")
 st_write(sample_grid,
          "C:/Users/kjsie/OneDrive/Documents/recovery-group/Buffered_fire/subset_points.shp")
 ```
