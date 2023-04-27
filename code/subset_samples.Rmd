@@ -42,5 +42,48 @@ all_sub <- all_sub %>%
   mutate(year_fire = year(Ig_Date),
          month_fire = month(Ig_Date),
          day_fire = day(Ig_Date))
+
+### Add unique ID
+all_sub <- all_sub %>%
+  mutate(unique_id = paste0(burned_status, "_",
+                            Event_ID))
+```
+
+## Make sample points
+```{r}
+### Make sample grid
+point_grid <- map(all_sub$unique_id, function(x) {
+  poly <- all_sub %>% filter(unique_id == x)
+  poly_samples <- poly %>%
+    ### Make samples (cellsize is where I'm defining the grid)
+    st_make_grid(cellsize = c(500, 500), what = "centers") %>%
+    ### Convert to sf
+    st_sf()  %>%
+    ### Add identifiers
+    mutate(unique_id = x,
+           lon = st_coordinates(.)[,1],
+           lat = st_coordinates(.)[,2])
+  return(poly_samples)
+})
+
+### Combine
+sample_grid <- do.call(rbind, point_grid)
+
+### Get additional data cols
+all_sub_cols <- all_sub
+st_geometry(all_sub_cols) <- NULL
+
+### Merge them
+sample_grid <- merge(sample_grid,
+                     all_sub_cols,
+                     by = "unique_id")
+```
+
+### Write out data
+```{r}
+st_write(all_sub,
+         "C:/Users/kjsie/OneDrive/Documents/recovery-group/Buffered_fire/subset_poly.shp")
+st_write(sample_grid,
+         "C:/Users/kjsie/OneDrive/Documents/recovery-group/Buffered_fire/subset_points.shp")
 ```
 
