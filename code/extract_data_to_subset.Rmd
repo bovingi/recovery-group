@@ -1,0 +1,100 @@
+---
+title: "extract_data_to_subset"
+output: html_document
+date: "2023-04-27"
+---
+
+## Description
+Code to clip data layer rasters to the extent of the sample areas and extract raster values to points from sampling grid. I'm including code to clip and extract in R and in Python, assuming you have all the data layers on your local computer.
+
+## R:
+### Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+### Load packages
+library(tidyverse)
+library(sf)
+library(sp)
+library(raster)
+
+### Set path for files -- replace this in your script!
+### file path for the subset of polygons and grid points
+path_subset <- "C:/Users/kjsie/OneDrive/Documents/recovery-group/Buffered_fire"
+
+### file path for the raster (here, I'm using Landfire's EVT as an example)
+path_raster <- "C:/Users/kjsie/OneDrive/Documents/recovery-group/LF2020_EVT_220_CONUS/Tif"
+
+### file path for cropped datasets
+path_saveto <- "C:/Users/kjsie/OneDrive/Documents/recovery-group"
+```
+
+### Open data layers and harmonize projections
+If you have a time series of separate raster files, you can stack the rasters using the raster::stack() command. Then you can implement the same changes across all the layers.
+```{r}
+### Open raster
+landfire_evt <- raster(file.path(path_raster, "/LC20_EVT_220.tif"))
+### All CONUS landfire data is projected into USA Contiguous Albers Equal Area Conic (EPSG:5070)
+
+### Open polygons and transform to EPSG of raster layer
+subset_polys <- st_read(file.path(path_subset, "/subset_polys.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = 5070)
+
+### Open sample grid and transform to EPSG of raster layer
+subset_points <- st_read(file.path(path_subset, "/subset_points.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = 5070)
+```
+
+### Subset data to subset
+```{r}
+## POLYGONS
+### Crop raster to subset of polygons
+crop_raster <- mask(crop(landfire_evt, 
+                         extent(subset_polys)), 
+                    subset_polys)
+
+## POINTS
+### Make the points sf an sp object
+points_sp <- as(subset_points, 'Spatial')
+
+### Extract raster values to grid samples
+extract_raster <- raster::extract(landfire_evt,
+                                  points_sp,
+                                  df = TRUE,
+                                  sp = TRUE)
+
+### Convert back to sf
+extract_raster <- extract_raster %>%
+  st_as_sf()
+
+## Write out files
+### write out raster cropped to polygons
+writeRaster(crop_raster,
+            filename = file.path(path_saveto, "/landfire_evt_cropped.tif"))
+
+### write out shp of raster values extracted to points
+st_write(extract_raster,
+         file.path(path_saveto, "/landfire_evt_points.shp"))
+```
+
+## Python:
+Adapted from the Forest Resiliency Data Synthesis Working Group (ANSWER_KEY_ECOSTRESS)
+```{python}
+# Create path to data
+hayman_boundary = gpd.read_file(
+    path.join(data_path, ‘Hay_sch_polys.geojson’))
+ecostress_path = path.join(
+    data_path, “ECOSTRESS_L4_WUE_23611_012_20220904T134321_0601_01_WUEavg_GEO.tif”)
+    
+# Open and clip the data, cliping it to the study area boundary
+ecostress = rxr.open_rasterio(ecostress_path).rio.clip(hayman_boundary.geometry)
+
+# GEDI Data
+GEDI_path = path.join(data_path, ‘GEDI_4A_Hayman.geojson’)
+GEDI_data = gpd.read_file(GEDI_path)
+```
+
