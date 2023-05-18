@@ -1,0 +1,56 @@
+---
+title: "mtbs"
+output: html_document
+date: "2023-05-18"
+---
+
+## Description
+Code to generate MTBS shapefiles for study area and time period. 
+
+### Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(sf)
+library(lubridate)
+
+```
+
+### Intersect MTBS fires (2000-2020) with Southern Rockies Ecoregion
+```{r}
+### Open mtbs perimeters
+mtbs <- st_read("E:/fire_sev_rdd/mtbs/mtbs_perims_DD.shp") %>%
+  st_transform(., crs = 5070)
+
+### change ignition date to class = date
+mtbs$Ig_Date <- ymd(mtbs$Ig_Date)
+mtbs$year <- year(mtbs$Ig_Date)
+mtbs$month <- month(mtbs$Ig_Date)
+mtbs$ig_day <- day(mtbs$Ig_Date)
+
+### subset to fires in 2000 onwward
+mtbs <- mtbs %>% filter(year > 1999)
+
+### open shapefile for southern rockies
+srockies <- st_read("data/southernrockies_shp/southernrockies.shp") %>%
+  st_transform(., crs = 5070)
+
+### run intersection
+mtbs_sr <- st_intersection(mtbs, srockies)
+
+### see what kind of fires are in this dataset
+table(mtbs_sr$Incid_Type)
+### 35 prescribed fires, 198 wildfires, 3 wildland fire use, 3 unknown
+
+### drop prescribed fires
+mtbs_sr <- mtbs_sr %>%
+  filter(!Incid_Type == "Prescribed Fire")
+
+### write out sf
+st_write(mtbs_sr,
+         dsn = "data",
+         layer = "mtbs_srockies",
+         driver = "ESRI Shapefile")
+```
+
