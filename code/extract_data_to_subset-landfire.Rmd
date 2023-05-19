@@ -1,0 +1,84 @@
+---
+title: "Landfire data processing for assessing post-fire forest recovery using remote sensing"
+author: "Sarah Hart"
+email: "sarah.hart@colostate.edu"
+output: html_document
+date: "2023-05-19"
+---
+
+# Description
+This code downloads the Landfire Biophysical Settings layer and clips it to the case study fire perimeters and extracts the values to sample points within each fire. It is based on Katherine Siegel's code (available in the file *extract_data_to_subset.Rmd*)
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+### Load packages
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(
+  here, # easy file structure
+  sp, # spatial data (old pkg)
+  sf, # spatial data (new pkg)
+  raster, # raster data
+  terra # new raster pkg
+)
+
+# google drive directory (needs to be set)
+gd_dir <-  "/Users/sarahhart/Library/CloudStorage/GoogleDrive-sarahjanehart13@gmail.com/Shared drives/Forest Recovery"
+
+options(timeout=60*10) # increase so that landfire data can be downloaded
+```
+
+```{r DL_SpatialData}
+dir.create(here(gd_dir, "Landfire"), showWarnings = FALSE)
+dir.create(here(gd_dir, "Landfire", "BPS"), showWarnings = FALSE)
+
+# Landfire
+temp <- here(gd_dir, "Landfire", "BPS", "LF2020-BPS.zip")
+  
+if(!file.exists(temp)){
+
+  download.file("https://www.landfire.gov/bulk/downloadfile.php?FNAME=US_220_mosaic-LF2020_BPS_220_CONUS.zip&TYPE=landfire", temp)
+  unzip(temp, exdir=here(gd_dir, "Landfire", "BPS"))
+}
+```
+
+### Open data layers and harmonize projections
+
+```{r import_SpatiaData}
+### Open raster
+landfire_bps <- rast(here(gd_dir, "Landfire", "BPS", 
+"LF2020_BPS_220_CONUS", "Tif", "LC20_BPS_220.tif"))
+
+### Open polygons and transform to EPSG of raster layer
+subset_polys <- st_read(here(gd_dir, "Buffered_fire", "subset_polygons", "subset_polys.shp")) %>% 
+  
+  ### transform projection to match raster
+  st_transform(., crs = crs(landfire_bps))
+
+### Open sample grid and transform to EPSG of raster layer
+subset_points <- st_read(here(gd_dir, "Buffered_fire", "subset_polygons", "subset_points.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = crs(landfire_bps))
+```
+
+### Subset data to subset of polygons
+```{r}
+dir.create(here(gd_dir, "Buffered_fire", "crop_to_subset", "Landfire"), showWarnings = F)
+dir.create(here(gd_dir, "Buffered_fire", "crop_to_subset", "Landfire", "BPS"), showWarnings = F)
+## POLYGONS
+### Crop raster to subset of polygons
+crop_raster <- mask(crop(landfire_bps, 
+                         extent(subset_polys)), 
+                    subset_polys,
+                    filename= here(gd_dir, "Buffered_fire", "crop_to_subset", "Landfire", "BPS", "landfire_bps_cropped.tif"), overwrite=T)
+
+### Extract raster values to grid samples
+subset_points <- terra::extract(landfire_bps,
+                                  subset_points,
+                                  bind=T)
+writeVector(subset_points, filename= here(gd_dir, "Buffered_fire", "crop_to_subset", "Landfire", "BPS", "landfire_bps_points.shp"), overwrite=T)
+                    
+```
+
