@@ -1,0 +1,89 @@
+---
+title: "Untitled"
+author: "Indra Boving"
+date: "2023-05-24"
+output: html_document
+---
+
+## R:
+### Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+### Load packages
+library(tidyverse)
+library(sf)
+library(sp)
+library(raster)
+library(here)
+#install.packages("devtools")
+#devtools::install_github("ropensci/FedData")
+library(FedData)
+library(rgdal)#
+
+### Set path for files -- replace this in your script!
+
+### file path for the subset of polygons and grid points
+path_subset <- here("recovery-group", "shapefiles")
+
+### file path for the raster (here, I'm using Landfire's EVT as an example)
+path_raster <- here("recovery-group", "tifs")
+
+### file path for cropped datasets
+path_saveto <- here("recovery-group", "nlcd_cropped_datasets")
+```
+
+```{r}
+nlcd_change <- raster(file.path(path_raster, "NLCD_2001_2019_change_index_L48.tiff"))
+
+plot(nlcd_change)
+```
+
+```{r}
+my_crs <- crs(nlcd_change)
+
+### Open polygons and transform to EPSG of raster layer
+subset_polys <- st_read(file.path(path_subset, "subset_polys.shp")) %>%
+  ### transform projection to match raster
+  st_transform(., crs = my_crs)
+subset_polys
+
+### Open sample grid and transform to EPSG of raster layer
+subset_points <- st_read(file.path(path_subset, "subset_points.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = my_crs)
+```
+
+### Subset data to subset of polygons
+```{r, warning = F}
+## POLYGONS
+### Crop raster to subset of polygons
+crop_raster <- mask(crop(nlcd_change, 
+                         extent(subset_polys)), 
+                    subset_polys)
+
+## POINTS
+### Make the points sf an sp object
+points_sp <- as(subset_points, 'Spatial')
+
+### Extract raster values to grid samples
+extract_raster_layer <- raster::extract(nlcd_change,
+                                  points_sp,
+                                  df = TRUE,
+                                  sp = TRUE)
+
+### Convert back to sf
+extract_raster <- extract_raster_layer %>%
+  st_as_sf() %>% 
+  rename(nlcd_change_code = Layer_1) 
+```
+
+```{r, warning = F}
+## Write out files
+### write out raster cropped to polygons
+writeRaster(crop_raster,filename = file.path(path_saveto, "nlcd_rast_cropped_nlcd_2001_2019_change_index.tif"), overwrite=TRUE)
+
+### write out shp of raster values extracted to points
+st_write(extract_raster, file.path(path_saveto, "nlcd_rast_points_nlcd_2001_2019_change_index.shp"), append = FALSE)
+```
