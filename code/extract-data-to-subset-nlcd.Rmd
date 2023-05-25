@@ -1,0 +1,318 @@
+---
+title: "extract_data_to_subset - NLCD"
+author: "author"
+output: html_document
+date: "2023-04-27"
+---
+
+## Description
+
+Code to clip NLCD rasters to the extent of the sample areas and extract raster values to points from sampling grid, based on code by Katherine Siegel.
+
+## R:
+### Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+### Load packages
+library(tidyverse)
+library(sf)
+library(sp)
+library(raster)
+library(here)
+#install.packages("devtools")
+#devtools::install_github("ropensci/FedData")
+library(FedData)
+library(rgdal)#
+
+### Set path for files -- replace this in your script!
+
+### file path for the subset of polygons and grid points
+path_subset <- here("recovery-group", "shapefiles")
+
+### file path for the raster (here, I'm using Landfire's EVT as an example)
+path_raster <- here("recovery-group", "tifs")
+
+### file path for cropped datasets
+path_saveto <- here("recovery-group", "nlcd_cropped_datasets")
+```
+
+#---------------------------
+
+#Way 1: (creates a WIDE dataset)
+
+Read in tiffs (downloaded from https://www.mrlc.gov/viewer/)
+
+```{r}
+nlcd_2001 <- raster(file.path(path_raster, "NLCD_2001_Land_Cover_L48.tiff"))
+nlcd_2004 <- raster(file.path(path_raster, "NLCD_2004_Land_Cover_L48.tiff"))
+nlcd_2006 <- raster(file.path(path_raster, "NLCD_2006_Land_Cover_L48.tiff"))
+nlcd_2008 <- raster(file.path(path_raster, "NLCD_2008_Land_Cover_L48.tiff"))
+nlcd_2011 <- raster(file.path(path_raster, "NLCD_2011_Land_Cover_L48.tiff"))
+nlcd_2013 <- raster(file.path(path_raster, "NLCD_2013_Land_Cover_L48.tiff"))
+nlcd_2016 <- raster(file.path(path_raster, "NLCD_2016_Land_Cover_L48.tiff"))
+nlcd_2019 <- raster(file.path(path_raster, "NLCD_2019_Land_Cover_L48.tiff"))
+
+nlcd_allyears <- raster::stack(nlcd_2001, nlcd_2004, nlcd_2006, nlcd_2008, nlcd_2011, nlcd_2013, nlcd_2016, nlcd_2019)
+
+plot(nlcd_allyears)
+```
+
+
+```{r}
+my_crs <- crs(nlcd_allyears)
+
+### Open polygons and transform to EPSG of raster layer
+subset_polys <- st_read(file.path(path_subset, "subset_polys.shp")) %>%
+  ### transform projection to match raster
+  st_transform(., crs = my_crs)
+subset_polys
+
+### Open sample grid and transform to EPSG of raster layer
+subset_points <- st_read(file.path(path_subset, "subset_points.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = my_crs)
+```
+
+
+### Subset data to subset of polygons
+```{r, warning = F}
+## POLYGONS
+### Crop raster to subset of polygons
+crop_raster <- mask(crop(nlcd_allyears, 
+                         extent(subset_polys)), 
+                    subset_polys)
+
+## POINTS
+### Make the points sf an sp object
+points_sp <- as(subset_points, 'Spatial')
+
+### Extract raster values to grid samples
+extract_raster_layer <- raster::extract(nlcd_allyears,
+                                  points_sp,
+                                  df = TRUE,
+                                  sp = TRUE)
+
+### Convert back to sf
+extract_raster <- extract_raster_layer %>%
+  st_as_sf() %>% 
+  rename(nlcd_2001 = Layer_1.1,
+         nlcd_2004 = Layer_1.2,
+         nlcd_2006 = Layer_1.3,
+         nlcd_2008 = Layer_1.4,
+         nlcd_2011 = Layer_1.5,
+         nlcd_2013 = Layer_1.6,
+         nlcd_2016 = Layer_1.7,
+         nlcd_2018 = Layer_1.8)
+```
+
+
+```{r, warning = F}
+#add legend: 
+legend<-pal_nlcd() %>% 
+  as.data.frame() %>% 
+  mutate(nlcd_code = ID)
+legend
+
+write.csv(legend, here("nlcd_metadata.csv"))
+
+extract_raster_legend <- merge(extract_raster, legend, by = c("nlcd_code"))
+```
+
+
+```{r, warning = F}
+## Write out files
+### write out raster cropped to polygons
+writeRaster(crop_raster,filename = file.path(path_saveto, "nlcd_rast_cropped_wide.tif"), overwrite=TRUE)
+
+### write out shp of raster values extracted to points
+st_write(extract_raster, file.path(path_saveto, "nlcd_rast_points_wide.shp"), append = FALSE)
+```
+
+#---------------------------
+
+#Way 2: 
+
+using get_nlcd() function, creates a LONG dataset. 
+
+Do the following for each year (could probably make easier with a loop, but I just did year by year and then stacked with raster::stack() at the end before extracting to polygons/points. Only 2001 shown here. 
+
+###Get 2001 nlcd data: 
+
+```{r}
+nlcd_2001 <-
+  get_nlcd(
+    template = subset_polys,
+    label = "2001",
+    year = 2001
+  )
+```
+```{r}
+###NLCD is in WGS84 Coordinate Systems (EPSG: 4326), but we can just define the CRS this way without having to set the code:
+my_crs <- crs(nlcd_2001)
+
+### Open polygons and transform to EPSG of raster layer
+subset_polys <- st_read(file.path(path_subset, "subset_polys.shp")) %>%
+  ### transform projection to match raster
+  st_transform(., crs = my_crs)
+
+### Open sample grid and transform to EPSG of raster layer
+subset_points <- st_read(file.path(path_subset, "subset_points.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = my_crs)
+```
+
+### Subset data to subset of polygons
+```{r}
+## POLYGONS
+### Crop raster to subset of polygons
+crop_2001 <- mask(crop(nlcd_2001, 
+                         extent(subset_polys)), 
+                    subset_polys)
+
+## POINTS
+### Make the points sf an sp object
+points_sp <- as(subset_points, 'Spatial')
+
+### Extract raster values to grid samples
+extract_raster_layer <- raster::extract(nlcd_2001,
+                                  points_sp,
+                                  df = TRUE,
+                                  sp = TRUE)
+
+### Convert back to sf
+extract_raster_2001 <- extract_raster_layer %>%
+  st_as_sf() %>% 
+  mutate(nlcd_code = Class) %>% 
+  dplyr::select(-Class)
+
+#add legend: 
+legend<-pal_nlcd() %>% 
+  as.data.frame() %>% 
+  mutate(nlcd_code = ID)
+legend
+
+extract_raster_legend_2001 <- merge(extract_raster_2001, legend, by = c("nlcd_code")) %>% 
+  mutate(nlcd_class = Class, 
+         nlcd_color = Color, 
+         nlcd_class_description = Description, 
+         nlcd_year = 2001) %>% 
+  dplyr::select(-ID, -Class, -Color, -Description) 
+
+## Write out files
+### write out raster cropped to polygons
+writeRaster(crop_2001,filename = file.path(path_saveto, "nlcd_rast_2001_cropped.tif"), overwrite=TRUE)
+
+### write out shp of raster values extracted to points
+st_write(extract_raster_legend_2001, file.path(path_saveto, "nlcd_rast_points_2001.shp"), append = F)
+```
+
+##Put all together: 
+
+Polygons: 
+
+```{r}
+nlcd_all <- raster::stack(crop_2019, 
+                         crop_2016,
+                         crop_2013,
+                         crop_2011,
+                         crop_2008,
+                         crop_2006,
+                         crop_2004,
+                         crop_2001
+                         )
+
+names(nlcd_all) <- c("2019", "2016", "2013", "2011", "2008", "2006", "2004", "2001")
+
+plot(nlcd_all)
+
+## Write out files
+### write out raster cropped to polygons
+writeRaster(nlcd_all,filename = file.path(path_saveto, "nlcd_rast_alldates_cropped.tif"), overwrite=TRUE)
+
+# read from disk, check
+r2 <- terra::rast(file.path(path_saveto, "nlcd_rast_alldates_cropped.tif"))
+r2
+
+plot(r2)
+```
+
+Points: 
+
+```{r, warning = F}
+nlcd_raster_all <- bind_rows(extract_raster_legend_2019,
+                             extract_raster_legend_2016,
+                             extract_raster_legend_2013,
+                             extract_raster_legend_2011,
+                             extract_raster_legend_2008,
+                             extract_raster_legend_2006,
+                             extract_raster_legend_2004,
+                             extract_raster_legend_2001) %>% 
+  janitor::clean_names()
+
+### write out shp of raster values extracted to points
+st_write(nlcd_raster_all, file.path(path_saveto, "nlcd_points_alldates.shp"), append = F)
+```
+
+#---------------------------
+
+#Change from 2001 to 2019
+
+```{r}
+nlcd_change <- raster(file.path(path_raster, "NLCD_2001_2019_change_index_L48.tiff"))
+
+plot(nlcd_change)
+```
+
+```{r}
+my_crs <- crs(nlcd_change)
+
+### Open polygons and transform to EPSG of raster layer
+subset_polys <- st_read(file.path(path_subset, "subset_polys.shp")) %>%
+  ### transform projection to match raster
+  st_transform(., crs = my_crs)
+subset_polys
+
+### Open sample grid and transform to EPSG of raster layer
+subset_points <- st_read(file.path(path_subset, "subset_points.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = my_crs)
+```
+
+### Subset data to subset of polygons
+```{r, warning = F}
+## POLYGONS
+### Crop raster to subset of polygons
+crop_raster <- mask(crop(nlcd_change, 
+                         extent(subset_polys)), 
+                    subset_polys)
+
+## POINTS
+### Make the points sf an sp object
+points_sp <- as(subset_points, 'Spatial')
+
+### Extract raster values to grid samples
+extract_raster_layer <- raster::extract(nlcd_change,
+                                  points_sp,
+                                  df = TRUE,
+                                  sp = TRUE)
+
+### Convert back to sf
+extract_raster <- extract_raster_layer %>%
+  st_as_sf() %>% 
+  rename(nlcd_change_code = Layer_1) 
+```
+
+```{r, warning = F}
+## Write out files
+### write out raster cropped to polygons
+writeRaster(crop_raster,filename = file.path(path_saveto, "nlcd_rast_cropped_nlcd_2001_2019_change_index.tif"), overwrite=TRUE)
+
+### write out shp of raster values extracted to points
+st_write(extract_raster, file.path(path_saveto, "nlcd_rast_points_nlcd_2001_2019_change_index.shp"), append = FALSE)
+```
+
+
