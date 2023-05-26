@@ -1,0 +1,138 @@
+---
+title: "extract_data_to_subset-topography"
+author: "Adriana Uscanga"
+date: "2023-05-25"
+output: html_document
+---
+
+## Description
+Code to clip topographic data to the extent of the sample areas (10 burned and 10 unburned polygons) and extract raster values to points from sampling grid. Polygons and points shapefiles can be found here: https://drive.google.com/drive/u/2/folders/1K9MRkhiBOF70WU27HRc5ZOS-SsOYjG8j
+I downloaded topographic data from the workshop data_sandbox folder through cyverse: /iplant/home/shared/earthlab/Macrosystems_workshop/data_sandbox/topography_southern_rockies.tif
+The topography_southern_rockies.tif file does not fully cover the sample areas, thus, I also downloaded a dem (NASA SRTM-30m using google earth engine) to clip and extract data (see With DEM section below).
+
+### Load packages and set paths
+```{r}
+
+### Load packages
+library(tidyverse)
+library(sf)
+library(sp)
+library(raster)
+
+### Set path for files -- I replaced this to set the path to my local computer
+### file path for the subset of polygons and grid points
+path_subset <- "/Users/adrianauscanga/Documents/Documents/recovery-group/adriana_scratch/subset_polygons"
+
+### file path for the raster (here, I'm using Landfire's EVT as an example)
+path_raster <- "/Users/adrianauscanga/Documents/Documents/recovery-group/adriana_scratch"
+
+### file path for cropped datasets
+path_saveto <- "/Users/adrianauscanga/Documents/Documents/recovery-group/adriana_scratch"
+```
+
+## With topography_southern_rockies.tif
+### Open data layers and harmonize projections
+
+```{r}
+### Open raster
+topo <- raster(file.path(path_raster, "topography_southern_rockies.tif"))
+names(topo) <- "elevation"
+### All CONUS landfire data is projected into USA Contiguous Albers Equal Area Conic (EPSG:5070)
+
+### Open polygons and transform to EPSG of raster layer
+subset_polys <- st_read(file.path(path_subset, "/subset_polys.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = crs(topo))
+
+### Open sample grid and transform to EPSG of raster layer
+subset_points <- st_read(file.path(path_subset, "/subset_points.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = crs(topo))
+```
+
+### Subset data to subset of polygons
+```{r}
+## POLYGONS
+### Crop raster to subset of polygons
+crop_raster <- mask(crop(topo, 
+                         extent(subset_polys)), 
+                    subset_polys)
+
+## POINTS
+### Make the points sf an sp object
+points_sp <- as(subset_points, 'Spatial')
+
+### Extract raster values to grid samples
+extract_raster <- raster::extract(topo,
+                                  points_sp,
+                                  df = TRUE,
+                                  sp = TRUE)
+
+### Convert back to sf
+extract_raster <- extract_raster %>%
+  st_as_sf()
+
+## Write out files
+### write out raster cropped to polygons
+writeRaster(crop_raster,
+            filename = file.path(path_saveto, "topo_cropped.tif"))
+
+### write out shp of raster values extracted to points
+st_write(extract_raster,
+         file.path(path_saveto, "topo_points.shp"))
+```
+
+## With DEM
+
+### Open data layers and harmonize projections
+
+```{r}
+### Open raster
+elevation <- raster(file.path(path_raster, "elevation_southern_rockies.tif"))
+
+### Open polygons and transform to EPSG of raster layer
+subset_polys <- st_read(file.path(path_subset, "/subset_polys.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = crs(elevation))
+
+### Open sample grid and transform to EPSG of raster layer
+subset_points <- st_read(file.path(path_subset, "/subset_points.shp")) %>%
+  
+  ### transform projection to match raster
+  st_transform(., crs = crs(elevation))
+```
+
+### Subset data to subset of polygons
+```{r}
+## POLYGONS
+### Crop raster to subset of polygons
+crop_raster <- mask(crop(elevation, 
+                         extent(subset_polys)), 
+                    subset_polys)
+
+## POINTS
+### Make the points sf an sp object
+points_sp <- as(subset_points, 'Spatial')
+
+### Extract raster values to grid samples
+extract_raster <- raster::extract(elevation,
+                                  points_sp,
+                                  df = TRUE,
+                                  sp = TRUE)
+
+### Convert back to sf
+extract_raster <- extract_raster %>%
+  st_as_sf()
+
+## Write out files
+### write out raster cropped to polygons
+writeRaster(crop_raster,
+            filename = file.path(path_saveto, "elevation_cropped.tif"))
+
+### write out shp of raster values extracted to points
+st_write(extract_raster,
+         file.path(path_saveto, "elevation_points.shp"))
+```
