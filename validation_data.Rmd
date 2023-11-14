@@ -1,0 +1,73 @@
+---
+title: "validation_data"
+output: html_document
+date: "2023-11-14"
+---
+
+## Data from Davis et al. 2023
+
+## Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+### Load packages
+library(tidyverse)
+library(sf)
+library(viridis)
+```
+
+## Subset Davis et al. data  
+
+* Subset to southern Rockies  
+* determine which are inside/outside fire perimeters
+
+```{r}
+### open data
+davis <- read.csv("data/Davis_et_al_regen_plot_data.csv")
+
+### convert to sf
+davis <- davis %>%
+  
+  ### drop points that are missing lat/long data
+  filter(!is.na(longitude)) %>%
+  filter(!is.na(latitude)) %>%
+  
+  ### convert to sf
+  st_as_sf(coords = c("longitude", 
+                      "latitude"), 
+           crs = 4326) %>%
+  
+  ### transform to 5070 for st_intersection
+  st_transform(5070)
+
+### open southern rockies shp
+srockies <- st_read("data/southernrockies_shp/southernrockies.shp") %>%
+  st_transform(., crs = 5070) %>%
+  dplyr::select(., US_L3NAME, geometry)
+
+### subset Davis data to southern rockies
+davis_srockies <- st_intersection(davis, srockies)
+
+### open MTBS perimeters
+mtbs <- st_read("data/mtbs_srockies.shp") %>%
+  st_transform(., crs = 5070)
+
+### overlay
+davis_burned <- st_intersection(davis_srockies,
+                                mtbs)
+
+### add column for burned/unburned
+davis_srockies <- davis_srockies %>%
+  mutate(burned = ifelse(plot_id %in% davis_burned$plot_id, 1, 0))
+
+### visualize
+ggplot() +
+  geom_sf(data = srockies) +
+  # geom_sf(data = davis_srockies, color = "black") +
+  geom_sf(data = davis_srockies, aes(color = log(dens_all))) +
+  # geom_sf(data = davis_srockies, aes(color = burned,
+  #                                    fill = burned)) +
+  scale_color_viridis() +
+  NULL
+```
+
