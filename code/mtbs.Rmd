@@ -14,6 +14,8 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(sf)
 library(lubridate)
+library(raster)
+library(stars)
 
 ```
 
@@ -52,5 +54,21 @@ st_write(mtbs_sr,
          dsn = "data",
          layer = "mtbs_srockies",
          driver = "ESRI Shapefile")
+```
+
+### Trailing vs stable forest fires
+```{r}
+### open mtbs
+mtbs_sr <- st_read("C:/Users/kjsie/Documents/recovery-group/data/mtbs_srockies.shp")
+
+### open trailing raster
+t_e <- read_stars("C:/Users/kjsie/Documents/recovery-group/data/stable_trailing_edge_forest.tif")
+# t_e <- projectRaster(t_e, crs = 5070)
+
+ggplot() +
+  geom_sf(data = mtbs_sr) +
+  geom_raster(data = t_e, aes(fill=factor(value)))
+
+
 ```
 
