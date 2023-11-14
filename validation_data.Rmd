@@ -71,3 +71,18 @@ ggplot() +
   NULL
 ```
 
+#### visualize field data
+```{r}
+### what is the spread of dens_all 
+#### [Density of post-fire conifer seedlings/saplings of any study species (Abies concolor, A. grandis, A. lasiocarpa, Pinus contorta, P. jeffreyi, P. ponderosa, Picea engelmannii, Pseudotsuga menziesii) within the plot]
+ggplot(data = davis_srockies) +
+  geom_point(aes(x = time_since_fire, 
+                 y = log(dens_all))) +
+  xlab("Years since fire") +
+  ylab("Seedling/sapling density (trees/ha)") +
+  theme_bw() +
+  NULL
+
+```
+
+
